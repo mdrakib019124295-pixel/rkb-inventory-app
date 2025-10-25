@@ -1,0 +1,1887 @@
+<!DOCTYPE html>  
+<html lang="bn">  
+<head>  
+  <meta charset="UTF-8" />  
+  <title>🏪 RKB স্টোর</title>  
+  <meta name="viewport" content="width=device-width,initial-scale=1" />  
+  <script src="https://cdn.tailwindcss.com"></script>  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>  
+  <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+  <style>  
+    .modal-backdrop { position: fixed; inset:0; background: rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index:50; }  
+    @media print {  
+      body * { visibility: hidden; }  
+      .printable, .printable * { visibility: visible; }  
+      .printable { position: absolute; left: 0; top: 0; width: 100%; }  
+    }  
+    /* Scanner styles */
+    #scanner-container {
+        position: fixed;
+        inset: 0;
+        background: black;
+        z-index: 100;
+        display: none; /* Hidden by default */
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    #scanner-viewport {
+        width: 100%;
+        max-width: 500px;
+        height: 300px;
+        position: relative;
+    }
+    #scanner-viewport canvas, #scanner-viewport video {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .drawingBuffer {
+        position: absolute;
+        top: 0;
+        left: 0;
+    }
+    .barcode-feedback {
+        color: white;
+        margin-top: 10px;
+        font-weight: bold;
+    }
+    .hidden-by-default { display: none; } /* Custom class for sensitive input hiding */
+    .locked-field {
+        background-color: #f3f4f6;
+        color: #9ca3af;
+        cursor: not-allowed;
+    }
+    /* >>>>>> এখন সক্রিয় বাটন লাল দেখাবে <<<<<< */
+    .category-button.active {
+        background-color: #dc2626; /* bg-red-600 */
+        color: white;
+        border-color: #dc2626; /* Add border color for better look */
+    }
+    .category-button:not(.active) {
+        background-color: white;
+        color: #4b5563; /* text-gray-700 */
+        border: 1px solid #d1d5db; /* Default border */
+    }
+  </style>  
+</head>  
+<body class="bg-gray-100 min-h-screen flex justify-center py-4">  
+  <div class="max-w-3xl w-full bg-white rounded-2xl shadow-lg p-5">  
+    <h2 class="text-2xl font-bold mb-4 text-center">🏪 RKB স্টোর</h2>  
+    
+    <div class="flex items-center gap-3 mb-3">
+        <input id="searchInput" type="text" placeholder="🔍 প্রোডাক্ট খুঁজুন..." class="flex-grow border p-2 rounded-lg" />
+        <div id="secretToggleContainer" class="flex items-center space-x-2 relative">
+            <button id="secretToggleButton" class="bg-red-600 text-white p-2 rounded-lg font-semibold text-xl transition-colors" title="গোপনীয় তথ্য দেখান/লুকান">🔒</button>
+            
+            <div id="inlinePasswordForm" class="absolute right-0 top-12 bg-white border p-3 rounded-lg shadow-xl hidden z-10 w-64">
+                <p class="text-sm font-semibold mb-2 text-center text-red-600">আনলক করার জন্য পাসওয়ার্ড দিন</p>
+                <input id="togglePasswordInput" type="password" placeholder="পাসওয়ার্ড" class="w-full border p-2 rounded-lg mb-2 text-center" />
+                <button id="togglePasswordSubmit" class="w-full bg-green-600 text-white p-2 rounded-lg font-semibold">আনলক করুন</button>
+                <button id="togglePasswordCancel" class="w-full bg-gray-400 text-white p-2 rounded-lg font-semibold mt-1">বাতিল</button>
+                <p class="text-xs text-gray-400 mt-2 text-center">গোপনীয়তা নিশ্চিত করতে কোনো পাসওয়ার্ড ইঙ্গিত দেওয়া হলো না।</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="mb-4 p-2 bg-gray-100 rounded-lg">
+        <h4 class="font-bold mb-2 text-sm text-indigo-700">নতুন ক্যাটাগরি তৈরি:</h4>
+        <div class="grid grid-cols-4 gap-2">
+            <input id="newCategoryNameInput" placeholder="নতুন ক্যাটাগরির নাম দিন" class="border p-2 rounded-lg col-span-3" />
+            <button type="button" id="addNewCategoryButton" class="bg-indigo-600 text-white p-2 rounded-lg font-semibold">➕ যোগ করুন</button>
+        </div>
+    </div>
+    <div id="categoryFilterContainer" class="flex flex-wrap gap-2 mb-4 p-2 bg-gray-100 rounded-lg">
+        </div>
+    <form id="addProductForm" class="grid grid-cols-3 gap-3 mb-4 border-b pb-4">  
+      <input id="productName" placeholder="প্রোডাক্ট নাম" class="border p-2 rounded-lg col-span-3" />  
+      <select id="productCategory" class="border p-2 rounded-lg col-span-3">
+          <option value="">-- ক্যাটাগরি বাছুন --</option>
+          </select>
+      
+      <div class="col-span-1 hidden-by-default" data-secret="true">
+        <input id="productCost" type="number" placeholder="কেনার দাম (৳)" class="border p-2 rounded-lg w-full locked-field" data-role="cost" readonly /> 
+      </div>
+      <input id="productPrice" type="number" placeholder="বিক্রয় দাম (৳)" class="border p-2 rounded-lg" />  
+      <div class="col-span-1 hidden-by-default" data-secret="true">
+        <input id="profitRate" type="number" placeholder="লাভ (৳)" class="border p-2 rounded-lg w-full locked-field" data-role="profit" readonly />  
+      </div>
+      <input id="productBarcode" placeholder="বারকোড (ঐচ্ছিক)" class="col-span-2 border p-2 rounded-lg" />
+      <button type="button" id="scanNewBarcode" class="bg-gray-500 text-white p-2 rounded-lg font-semibold">স্ক্যান করুন</button>
+      <button type="submit" class="col-span-3 bg-green-600 text-white p-2 rounded-lg font-semibold">➕ যোগ করুন</button>  
+    </form>  
+
+    <div class="border-t pt-3 mb-4">
+      <h3 class="font-bold mb-2">📥 স্টক যোগ/বিয়োগ করুন (মজুদ)</h3>
+      <div class="grid grid-cols-4 gap-2">
+          <button type="button" id="scanStockBarcode" class="bg-green-700 text-white p-2 rounded-lg col-span-4 font-semibold">বারকোড স্ক্যান করে স্টক যোগ/বিয়োগ করুন</button>
+      </div>
+      <form id="updateStockForm" class="grid grid-cols-4 gap-2 mt-2">
+        <select id="stockProductIndex" class="border p-2 rounded-lg col-span-2">
+          <option value="">-- প্রোডাক্ট বাছুন --</option>
+          </select>
+        <input id="stockQuantity" type="number" placeholder="পরিমাণ (কেজি/পিছ)" class="border p-2 rounded-lg" />
+        <button type="submit" class="bg-indigo-600 text-white p-2 rounded-lg font-semibold">আপডেট</button>
+      </form>
+      <p class="text-xs text-gray-500 mt-1">কেজি/পিস ইনপুট দিন। বিয়োগ করতে ঋণাত্মক (-) সংখ্যা দিন।</p>
+    </div>
+    <div class="border-t pt-3 mb-4">
+        <button type="button" id="scanSellBarcode" class="bg-blue-700 text-white p-2 rounded-lg w-full font-semibold">📷 বারকোড স্ক্যান করে বিক্রি করুন</button>
+    </div>
+    <div id="productList" class="space-y-2 mb-4"></div>  
+
+    <div class="border-t pt-3 grid grid-cols-3 gap-2 text-center mb-4">  
+      <div class="bg-gray-100 p-2 rounded-lg"><p>মোট মাল</p><h3 id="totalQty" class="font-bold">0</h3></div>  
+      <div class="bg-gray-100 p-2 rounded-lg"><p>মোট বিক্রি</p><h3 id="totalSell" class="font-bold">৳0</h3></div>  
+      <div class="bg-gray-100 p-2 rounded-lg hidden-by-default" data-secret="true">
+        <p>মোট লাভ</p><h3 id="totalProfit" class="font-bold text-green-600">৳0</h3>
+      </div>  
+    </div>  
+
+    <div class="border-t pt-3 mb-4">  
+      <h3 class="font-bold mb-2">👤 কাস্টমার তথ্য</h3>  
+      <div class="grid grid-cols-3 gap-2">  
+        <input id="custName" placeholder="নাম" class="border p-2 rounded-lg" />  
+        <input id="custPhone" placeholder="মোবাইল" class="border p-2 rounded-lg" />  
+        <input id="custAddr" placeholder="ঠিকানা" class="border p-2 rounded-lg" />  
+      </div>  
+    </div>  
+
+    <div class="border-t pt-3 mb-4">  
+      <h3 class="font-bold mb-2">💰 বিল তথ্য</h3>  
+      <div class="grid grid-cols-3 gap-2">  
+        <input id="discountInput" type="number" placeholder="ডিসকাউন্ট (৳)" class="border p-2 rounded-lg" />  
+        <input id="paidInput" type="number" placeholder="পরিশোধিত (৳)" class="border p-2 rounded-lg" />  
+        <input id="dueInput" type="number" placeholder="বাকি (৳)" class="border p-2 rounded-lg bg-gray-100" readonly />  
+      </div>  
+    </div>  
+
+    <div class="flex justify-between mb-4">  
+      <button id="createMemo" class="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold">🧾 মেমো তৈরি</button>  
+      <button id="clearQty" class="bg-yellow-500 text-white px-4 py-2 rounded-lg font-semibold">🔄 রিসেট</button>  
+      <div class="flex gap-2">
+        <button id="openPasswordModal" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-semibold hidden-by-default" data-secret="true">🔑 পাসওয়ার্ড পরিবর্তন</button>
+        <button id="openReport" class="bg-purple-600 text-white px-4 py-2 rounded-lg font-semibold hidden-by-default" data-secret="true">📈 রিপোর্ট ও ইনভেন্টরি</button>
+      </div>
+    </div>  
+
+    <div id="memoArea" class="hidden border rounded-lg p-3 mb-4 bg-gray-50 printable"></div>  
+
+    <div class="border-t pt-3">  
+      <h3 class="font-bold mb-2">🗂️ মেমো হিস্ট্রি (সক্রিয়)</h3>  
+      <div id="memoHistory" class="space-y-2"></div>  
+      <button id="showPermanentHistory" class="bg-gray-600 text-white px-3 py-1 rounded-lg font-semibold mt-3 hidden-by-default" data-secret="true">🗓️ পুরোনো মেমো ইতিহাস দেখুন</button>
+    </div>
+
+  </div>    <div id="editModal" class="hidden modal-backdrop">  
+    <div class="bg-white rounded-lg w-full max-w-md p-4 shadow-lg">  
+      <h3 class="text-lg font-bold mb-2">পণ্য এডিট করো</h3>  
+      <div class="space-y-2">  
+        <input id="editName" class="border p-2 rounded w-full" placeholder="প্রোডাক্ট নাম" />  
+        <select id="editCategory" class="border p-2 rounded w-full">
+            </select>
+        <input id="editCost" type="number" class="border p-2 rounded w-full locked-field" placeholder="কেনার দাম (৳)" data-secret="true" data-role="cost" readonly /> 
+        <input id="editPrice" type="number" class="border p-2 rounded w-full" placeholder="বিক্রয় দাম (৳)" />  
+        <input id="editProfit" type="number" class="border p-2 rounded w-full locked-field" placeholder="লাভ (৳)" data-secret="true" data-role="profit" readonly />  
+      </div>  
+      <div class="flex justify-end gap-2 mt-4">  
+        <button id="cancelEdit" class="px-3 py-1 rounded bg-gray-200">বাতিল</button>  
+        <button id="saveEdit" class="px-3 py-1 rounded bg-blue-600 text-white">সেভ</button>  
+      </div>  
+    </div>  
+  </div>  
+  
+  <div id="reportModal" class="hidden modal-backdrop">  
+    <div class="bg-white rounded-lg w-full max-w-lg p-4 shadow-lg overflow-y-auto max-h-[90vh]">  
+      <h3 class="text-xl font-bold mb-2 text-center border-b pb-2">📈 ইনভেন্টরি ও লাভ রিপোর্ট</h3>  
+      <div id="reportContent" class="space-y-4">
+          </div>
+      <div class="flex justify-end mt-4">  
+        <button id="closeReport" class="px-3 py-1 rounded bg-gray-200">বন্ধ করুন</button>  
+      </div>  
+    </div>  
+  </div>
+  <div id="passwordModal" class="hidden modal-backdrop">  
+    <div class="bg-white rounded-lg w-full max-w-sm p-5 shadow-lg">  
+      <h3 class="text-xl font-bold mb-4 text-center">🔑 পাসওয়ার্ড পরিবর্তন</h3>  
+      <div class="space-y-3">  
+        <input id="currentPassword" type="password" class="border p-3 rounded w-full" placeholder="বর্তমান পাসওয়ার্ড দিন" />  
+        <input id="newPassword" type="password" class="border p-3 rounded w-full" placeholder="নতুন পাসওয়ার্ড দিন (কমপক্ষে ৪ অক্ষর)" />  
+        <input id="confirmPassword" type="password" class="border p-3 rounded w-full" placeholder="নতুন পাসওয়ার্ড নিশ্চিত করুন" />  
+      </div>  
+      <div class="flex justify-end gap-2 mt-4">  
+        <button id="cancelPasswordChange" class="px-4 py-2 rounded bg-gray-400 text-white font-semibold">বাতিল</button>  
+        <button id="saveNewPassword" class="px-4 py-2 rounded bg-green-600 text-white font-semibold">পাসওয়ার্ড সেভ করুন</button>  
+      </div>  
+    </div>  
+  </div>
+  <div id="scanner-container">
+      <div id="scanner-viewport"></div>
+      <p id="barcode-feedback" class="barcode-feedback">স্ক্যান করার জন্য বারকোডের ওপর ক্যামেরা ধরুন...</p>
+      <button id="closeScanner" class="mt-4 bg-red-600 text-white p-2 rounded-lg font-semibold">বন্ধ করুন</button>
+  </div>
+  <div id="permanentHistoryModal" class="hidden modal-backdrop">  
+    <div class="bg-white rounded-lg w-full max-w-lg p-4 shadow-lg overflow-y-auto max-h-[90vh]">  
+      <h3 class="text-xl font-bold mb-2 text-center border-b pb-2">🗓️ পুরোনো মেমোর ইতিহাস (১ বছরের মধ্যে)</h3>  
+      <div id="permanentMemoHistory" class="space-y-2"></div>
+      <p class="text-xs text-red-500 mt-4 text-center">এই মেমোগুলি স্বয়ংক্রিয়ভাবে ১ বছর পর পর মুছে যাবে।</p>
+      <div class="flex justify-end mt-4">  
+        <button id="closePermanentHistoryModal" class="px-3 py-1 rounded bg-gray-200">বন্ধ করুন</button>  
+      </div>  
+    </div>  
+  </div>
+  
+  <script>  
+  // DOM refs  
+  const productList = document.getElementById('productList');  
+  const totalQty = document.getElementById('totalQty');  
+  const totalSell = document.getElementById('totalSell');  
+  const totalProfit = document.getElementById('totalProfit'); 
+  const searchInput = document.getElementById('searchInput');  
+  
+  const memoArea = document.getElementById('memoArea');  
+  const memoHistoryDiv = document.getElementById('memoHistory'); // Renamed to avoid conflict
+  
+  const discountInput = document.getElementById('discountInput');  
+  const paidInput = document.getElementById('paidInput');  
+  const dueInput = document.getElementById('dueInput');  
+
+  const reportModal = document.getElementById('reportModal');
+  const reportContent = document.getElementById('reportContent');
+  const stockProductIndex = document.getElementById('stockProductIndex'); 
+  const productBarcodeInput = document.getElementById('productBarcode'); 
+  const productCategoryInput = document.getElementById('productCategory'); 
+  const categoryFilterContainer = document.getElementById('categoryFilterContainer'); 
+  // NEW DOM REFS for category creation
+  const newCategoryNameInput = document.getElementById('newCategoryNameInput');
+  const addNewCategoryButton = document.getElementById('addNewCategoryButton');
+  
+  const productCostInput = document.getElementById('productCost'); 
+  const profitRateInput = document.getElementById('profitRate'); 
+  
+  const editModal = document.getElementById('editModal');  
+  const editName = document.getElementById('editName');  
+  const editCategory = document.getElementById('editCategory'); 
+  const editCost = document.getElementById('editCost'); 
+  const editPrice = document.getElementById('editPrice');  
+  const editProfit = document.getElementById('editProfit'); 
+  const saveEdit = document.getElementById('saveEdit');  
+  const cancelEdit = document.getElementById('cancelEdit');  
+
+  // Barcode Scanner DOM
+  const scannerContainer = document.getElementById('scanner-container');
+  const barcodeFeedback = document.getElementById('barcode-feedback');
+  let scannerMode = null; 
+
+  // Password Toggle DOM
+  const secretToggleButton = document.getElementById('secretToggleButton');
+  const inlinePasswordForm = document.getElementById('inlinePasswordForm');
+  const togglePasswordInput = document.getElementById('togglePasswordInput');
+  const togglePasswordSubmit = document.getElementById('togglePasswordSubmit');
+  const togglePasswordCancel = document.getElementById('togglePasswordCancel');
+
+  // Password Change Modal DOM Refs
+  const passwordModal = document.getElementById('passwordModal');
+  const currentPasswordInput = document.getElementById('currentPassword');
+  const newPasswordInput = document.getElementById('newPassword');
+  const confirmPasswordInput = document.getElementById('confirmPassword');
+  const saveNewPasswordButton = document.getElementById('saveNewPassword');
+  const cancelPasswordChangeButton = document.getElementById('cancelPasswordChange');
+  const openPasswordModalButton = document.getElementById('openPasswordModal');
+  
+  // NEW Permanent History Modal DOM Refs
+  const showPermanentHistoryButton = document.getElementById('showPermanentHistory');
+  const permanentHistoryModal = document.getElementById('permanentHistoryModal');
+  const permanentMemoHistoryDiv = document.getElementById('permanentMemoHistory');
+
+  
+  // storage  
+  let products = JSON.parse(localStorage.getItem('products')) || [];  
+  let memos = JSON.parse(localStorage.getItem('memos')) || []; // Active memos
+  let memoHistory = JSON.parse(localStorage.getItem('memoHistory')) || []; // Permanent history
+  let serial = parseInt(localStorage.getItem('memoSerial')) || 1001;
+  let expenses = JSON.parse(localStorage.getItem('expenses')) || []; 
+  let editingIndex = null;  
+  let currentMemo = null;  
+
+  // NEW: Current selected category filter (default to 'all')
+  let currentCategoryFilter = 'all';
+  
+  // Define default categories 
+  const DEFAULT_CATEGORIES = {
+      'grocery': 'গ্রোসারি',
+      'electronic': 'ইলেকট্রনিক',
+      'other': 'অন্যান্য'
+  };
+
+
+  // SECRETS & AUTHENTICATION
+  // Load password from localStorage, default to '1234'
+  let SECRET_PASSWORD = localStorage.getItem('appPassword') || '1234'; 
+  
+  function savePassword(newPass) {
+      SECRET_PASSWORD = newPass;
+      localStorage.setItem('appPassword', newPass);
+  }
+
+  // Ensure initial default password is saved for persistence
+  if (localStorage.getItem('appPassword') === null) {
+      savePassword('1234');
+  }
+
+  // Load initial state for persistent unlock
+  let secretsVisible = localStorage.getItem('secretsVisible') === 'true'; 
+
+  function saveSecretsState() {
+      localStorage.setItem('secretsVisible', secretsVisible);
+  }
+
+  function updateSecretsVisibility() {
+      // 1. Toggle visibility of secret fields (using data-secret="true")
+      document.querySelectorAll('[data-secret="true"]').forEach(el => {
+          if (secretsVisible) {
+              el.classList.remove('hidden-by-default');
+          } else {
+              el.classList.add('hidden-by-default');
+          }
+      });
+
+      // 2. Toggle locked styles and readonly for secret inputs (cost/profit)
+      document.querySelectorAll('[data-role="cost"], [data-role="profit"]').forEach(el => {
+          if (secretsVisible) {
+              el.classList.remove('locked-field');
+              el.readOnly = false;
+          } else {
+              el.classList.add('locked-field');
+              el.readOnly = true;
+          }
+      });
+
+      // 3. Update the toggle button icon and color
+      secretToggleButton.textContent = secretsVisible ? '🔓' : '🔒';
+      secretToggleButton.classList.toggle('bg-red-600', !secretsVisible);
+      secretToggleButton.classList.toggle('bg-green-600', secretsVisible);
+      
+      // 4. Re-render dependent components
+      renderProducts(searchInput.value); 
+      renderHistory(memos, memoHistoryDiv, 'active'); // Render active memos
+      updateSummary();
+      saveSecretsState();
+  }
+
+  // Event listener for the main toggle button (Lock/Unlock)
+  secretToggleButton.addEventListener('click', () => {
+      if (secretsVisible) {
+          // Current state: UNLOCKED -> Action: LOCK
+          if (confirm("গোপনীয় তথ্য লুকানোর জন্য লক করবেন?")) {
+              secretsVisible = false;
+              inlinePasswordForm.classList.add('hidden');
+              updateSecretsVisibility();
+              alert("🔒 গোপনীয় অংশগুলো লক করা হলো।");
+          }
+      } else {
+          // Current state: LOCKED -> Action: SHOW PASSWORD PROMPT
+          inlinePasswordForm.classList.toggle('hidden');
+          togglePasswordInput.value = '';
+          togglePasswordInput.focus();
+      }
+  });
+
+  // Event listener for inline password submission
+  togglePasswordSubmit.addEventListener('click', () => {
+      if (togglePasswordInput.value === SECRET_PASSWORD) { // Uses SECRET_PASSWORD variable
+          secretsVisible = true;
+          inlinePasswordForm.classList.add('hidden');
+          updateSecretsVisibility();
+          alert("🔓 পাসওয়ার্ড সঠিক। গোপনীয় অংশগুলো আনলক করা হলো।");
+      } else {
+          alert("ভুল পাসওয়ার্ড। আবার চেষ্টা করুন।");
+          togglePasswordInput.value = '';
+          togglePasswordInput.focus();
+      }
+  });
+  togglePasswordInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        togglePasswordSubmit.click();
+    }
+  });
+
+  // Event listener for inline password cancellation
+  togglePasswordCancel.addEventListener('click', () => {
+      inlinePasswordForm.classList.add('hidden');
+  });
+  
+  // Password Change Modal Logic
+  openPasswordModalButton.addEventListener('click', () => {
+      if (secretsVisible) {
+          passwordModal.classList.remove('hidden');
+          currentPasswordInput.value = '';
+          newPasswordInput.value = '';
+          confirmPasswordInput.value = '';
+          currentPasswordInput.focus();
+      } else {
+          alert("🔑 পাসওয়ার্ড পরিবর্তন করতে হলে সিস্টেমটি আনলক করতে হবে।");
+      }
+  });
+  
+  cancelPasswordChangeButton.addEventListener('click', () => {
+      passwordModal.classList.add('hidden');
+  });
+  
+  passwordModal.addEventListener('click', (ev) => {
+      if (ev.target === passwordModal) passwordModal.classList.add('hidden');
+  });
+
+  saveNewPasswordButton.addEventListener('click', () => {
+      const current = currentPasswordInput.value;
+      const newPass = newPasswordInput.value;
+      const confirmPass = confirmPasswordInput.value;
+
+      if (current !== SECRET_PASSWORD) {
+          alert("⚠️ বর্তমান পাসওয়ার্ডটি সঠিক নয়।");
+          currentPasswordInput.focus();
+          return;
+      }
+
+      if (newPass.length < 4) {
+          alert("⚠️ নতুন পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে।");
+          newPasswordInput.focus();
+          return;
+      }
+
+      if (newPass !== confirmPass) {
+          alert("⚠️ নতুন পাসওয়ার্ড এবং নিশ্চিতকরণ পাসওয়ার্ড মিলছে না।");
+          confirmPasswordInput.focus();
+          return;
+      }
+
+      // Success: Save the new password
+      savePassword(newPass); // Save to variable and localStorage
+      passwordModal.classList.add('hidden');
+      alert("✅ পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে! এখন সিস্টেমটি আবার লক করা হলো।");
+      
+      // As a safety measure, automatically lock the system after changing the password
+      secretsVisible = false;
+      updateSecretsVisibility();
+  });
+
+
+  // helpers  
+  function saveProducts(){ localStorage.setItem('products', JSON.stringify(products)); }  
+  function saveMemos(){ localStorage.setItem('memos', JSON.stringify(memos)); } // Active Memos
+  function saveMemoHistory(){ localStorage.setItem('memoHistory', JSON.stringify(memoHistory)); } // Permanent History
+  function saveSerial(){ localStorage.setItem('memoSerial', serial); }  
+  function saveExpenses(){ localStorage.setItem('expenses', JSON.stringify(expenses)); } 
+  function fmt(n){ return Number(n||0).toFixed(2); }  
+  function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }  
+
+  // NEW: Helper to format category name for display
+  function formatCategoryName(key) {
+      // Use the key itself if no specific mapping is found.
+      if (key === 'grocery') return 'গ্রোসারি';
+      if (key === 'electronic') return 'ইলেকট্রনিক';
+      if (key === 'other') return 'অন্যান্য';
+      return key; 
+  }
+
+  // Helper to get all unique category keys, including defaults
+  function getAllCategories() {
+      const categories = new Set();
+      // Add default categories
+      Object.keys(DEFAULT_CATEGORIES).forEach(key => categories.add(key));
+
+      // Add categories from products (including custom ones)
+      products.forEach(p => {
+          if (p.category) categories.add(p.category);
+      });
+      // Remove dummy category names if they exist as keys
+      categories.forEach(c => {
+        if (c.startsWith('__CATEGORY_')) categories.delete(c);
+      })
+      return Array.from(categories).sort();
+  }
+
+  // Helper to populate the Select dropdown in the Add Product and Edit Modal forms
+  function populateCategoryDropdowns() {
+      const allCategories = getAllCategories();
+      
+      // 1. Add Product Form Dropdown
+      productCategoryInput.innerHTML = '<option value="">-- ক্যাটাগরি বাছুন --</option>';
+      allCategories.forEach(key => {
+          const option = document.createElement('option');
+          option.value = key;
+          option.textContent = formatCategoryName(key);
+          productCategoryInput.appendChild(option);
+      });
+
+      // 2. Edit Modal Dropdown
+      editCategory.innerHTML = '';
+      allCategories.forEach(key => {
+          const option = document.createElement('option');
+          option.value = key;
+          option.textContent = formatCategoryName(key);
+          editCategory.appendChild(option);
+      });
+  }
+
+  // NEW: Logic for adding a new category
+  addNewCategoryButton.addEventListener('click', addNewCategory);
+
+  function addNewCategory() {
+      const newCategoryName = newCategoryNameInput.value.trim();
+
+      if (!newCategoryName) {
+          alert('⚠️ নতুন ক্যাটাগরির নাম দিন।');
+          return;
+      }
+      
+      const lowerCaseName = newCategoryName.toLowerCase();
+      
+      // Check for existing categories
+      const existingCategories = getAllCategories().map(c => c.toLowerCase());
+      if (existingCategories.includes(lowerCaseName) || Object.values(DEFAULT_CATEGORIES).map(c => c.toLowerCase()).includes(lowerCaseName)) {
+          alert(`⚠️ "${newCategoryName}" নামে একটি ক্যাটাগরি ইতিমধ্যেই আছে বা ডিফল্ট হিসেবে সংরক্ষিত।`);
+          return;
+      }
+      
+      // To ensure the category is available for filtering and dropdowns, 
+      // we must add at least one dummy product with that category.
+      const isNewCategory = !products.some(p => p.category && p.category.toLowerCase() === lowerCaseName);
+
+      if (isNewCategory) {
+        products.push({ 
+            name: `__CATEGORY_${newCategoryName}__`, // Dummy name to prevent accidental selling
+            category: newCategoryName, 
+            costPrice: 0, 
+            price: 0, 
+            profitRate: 0, 
+            barcode: null, 
+            kg: 0, 
+            pc: 0, 
+            stock: 0 
+        }); 
+        saveProducts();
+      }
+
+      newCategoryNameInput.value = '';
+      alert(`✅ নতুন ক্যাটাগরি "${newCategoryName}" সফলভাবে তৈরি হয়েছে।`);
+      
+      // Re-render everything to update dropdowns and filter buttons
+      renderProducts(searchInput.value); 
+  }
+
+  // Expense Logging Logic (unchanged)
+  function getCategoryName(key) {
+      switch(key) {
+          case 'personal': return 'ব্যক্তিগত খরচ';
+          case 'family': return 'পারিবারিক খরচ';
+          case 'store': return 'দোকানের খরচ';
+          case 'withdrawal': return 'দোকান থেকে নিজের জন্য তোলা';
+          default: return 'অন্যান্য খরচ';
+      }
+  }
+
+  function handleExpenseSubmission(e) {
+      e.preventDefault();
+      const category = document.getElementById('expenseCategory').value;
+      const amount = parseFloat(document.getElementById('expenseAmount').value);
+      const description = document.getElementById('expenseDescription').value.trim();
+
+      if (!category || category === '') {
+          alert('⚠️ খরচের ধরন বাছুন।');
+          return;
+      }
+      if (isNaN(amount) || amount <= 0) {
+          alert('⚠️ সঠিক পরিমাণ দিন।');
+          return;
+      }
+
+      const expense = {
+          id: Date.now(),
+          date: new Date().toISOString(), 
+          category,
+          amount,
+          description
+      };
+
+      expenses.push(expense);
+      saveExpenses();
+      e.target.reset();
+      
+      renderReports(); 
+      
+      alert(`✅ ${getCategoryName(category)} (${fmt(amount)} ৳) যোগ হয়েছে।`);
+  }
+  
+  function deleteExpense(id) {
+    if(confirm('এই খরচের এন্ট্রিটি মুছে ফেলতে চান?')) {
+        expenses = expenses.filter(x => x.id !== id);
+        saveExpenses();
+        renderReports(); // Re-render the report modal
+    }
+  }
+
+  function generateDailyExpenseHtml() {
+      // Expense logging form HTML
+      const expenseFormHtml = `
+          <h4 class="font-bold mb-2 text-xl text-red-700">💸 নতুন খরচের এন্ট্রি</h4>
+          <form id="addExpenseFormModal" class="grid grid-cols-4 gap-2 border p-3 rounded-lg bg-red-50">
+              <select id="expenseCategory" class="border p-2 rounded-lg col-span-2" required>
+                  <option value="">-- খরচের ধরন বাছুন --</option>
+                  <option value="personal">ব্যক্তিগত খরচ</option>
+                  <option value="family">পারিবারিক খরচ</option>
+                  <option value="store">দোকানের খরচ</option>
+                  <option value="withdrawal">দোকান থেকে নিজের জন্য তোলা</option>
+              </select>
+              <input id="expenseAmount" type="number" placeholder="পরিমাণ (৳)" class="border p-2 rounded-lg" required />
+              <button type="submit" class="bg-red-600 text-white p-2 rounded-lg font-semibold">যোগ করুন</button>
+              <input id="expenseDescription" placeholder="বিবরণ (ঐচ্ছিক)" class="col-span-4 border p-2 rounded-lg" />
+          </form>
+      `;
+
+      // Daily history logic
+      const today = new Date().toISOString().substring(0, 10);
+      const dailyExpenses = expenses.filter(e => e.date.startsWith(today)).reverse();
+      let total = 0;
+      
+      let historyHtml = '<h4 class="font-bold mb-2 mt-4 text-xl">📅 আজকের খরচের হিস্ট্রি</h4><div id="expenseHistoryInModal" class="space-y-2">';
+
+      if (dailyExpenses.length === 0) {
+          historyHtml += '<p class="text-center text-gray-500">আজকের কোনো খরচ নেই।</p>';
+      } else {
+          dailyExpenses.forEach(e => {
+              total += e.amount;
+              historyHtml += `
+                  <div class="border p-2 rounded flex justify-between items-center bg-white shadow-sm">
+                      <div>
+                          <p class="font-semibold text-sm text-red-700">${getCategoryName(e.category)}: ৳${fmt(e.amount)}</p>
+                          <p class="text-xs text-gray-500">${e.description ? escapeHtml(e.description) : 'কোনো বিবরণ নেই'}</p>
+                      </div>
+                      <button class="text-red-500 hover:text-red-700 text-lg delete-expense-in-modal" data-id="${e.id}" title="মুছে ফেলুন">❌</button>
+                  </div>
+              `;
+          });
+      }
+
+      historyHtml += '</div>';
+      historyHtml += `<div class="flex justify-between items-center mt-2 pt-2 border-t border-dashed">
+              <span class="font-bold text-lg">আজকের মোট খরচ:</span>
+              <span id="totalDailyExpenseInModal" class="font-bold text-xl text-red-700">৳${fmt(total)}</span>
+          </div>`;
+
+      return `<div class="border p-4 rounded-lg bg-gray-50 mt-4 space-y-4">${expenseFormHtml}${historyHtml}</div>`;
+  }
+  // END Expense Logging Logic
+
+  // Barcode Scanner Functions (unchanged logic)
+  function startScanner(mode) {
+    scannerMode = mode;
+    scannerContainer.style.display = 'flex';
+    barcodeFeedback.textContent = 'স্ক্যান করার জন্য বারকোডের ওপর ক্যামেরা ধরুন...';
+
+    Quagga.init({
+        inputStream : {
+            name : "Live",
+            type : "LiveStream",
+            target: document.querySelector('#scanner-viewport'),
+            constraints: {
+                facingMode: "environment" // Use back camera
+            }
+        },
+        decoder : {
+            readers : ["ean_reader","upc_reader","code_128_reader"] // Common barcode types
+        },
+        locate: true
+    }, function(err) {
+        if (err) {
+            console.error(err);
+            barcodeFeedback.textContent = '⚠️ ক্যামেরা চালু করতে সমস্যা হয়েছে: ' + err.message;
+            return
+        }
+        Quagga.start();
+        Quagga.onDetected(onBarcodeDetected);
+    });
+  }
+
+  function stopScanner() {
+    Quagga.stop();
+    scannerContainer.style.display = 'none';
+    scannerMode = null;
+  }
+
+  function onBarcodeDetected(result) {
+    const code = result.codeResult.code;
+    // Find product based on barcode, ignoring dummy category products
+    const existingProduct = products.find(p => p.barcode === code && !p.name.startsWith('__CATEGORY_'));
+    const existingProductIndex = products.findIndex(p => p.barcode === code && !p.name.startsWith('__CATEGORY_'));
+    
+    barcodeFeedback.textContent = `✅ বারকোড স্ক্যান হয়েছে: ${code}`;
+    
+    // Stop the scanner immediately
+    stopScanner(); 
+
+    if (scannerMode === 'add_product') {
+        productBarcodeInput.value = code;
+    } else if (scannerMode === 'add_stock') {
+        if (!existingProduct) {
+            alert(`⚠️ এই বারকোড (${code}) এর কোনো পণ্য খুঁজে পাওয়া যায়নি। প্রথমে 'যোগ করুন' ফর্মে পণ্যটি যোগ করুন।`);
+            return;
+        }
+        // Use Product Name as the value for the dropdown
+        stockProductIndex.value = existingProduct.name; 
+        document.getElementById('stockQuantity').value = 1; 
+        alert(`✅ ${existingProduct.name} পণ্যটি স্টক আপডেটের জন্য প্রস্তুত।`);
+
+    } else if (scannerMode === 'sell') {
+        if (!existingProduct) {
+            alert(`⚠️ এই বারকোড (${code}) এর কোনো পণ্য খুঁজে পাওয়া যায়নি।`);
+            return;
+        }
+        const i = existingProductIndex;
+        changePc(i, 1);
+        alert(`✅ ${existingProduct.name} (১ পিছ) মেমোতে যোগ হয়েছে।`);
+    }
+  }
+
+  // Barcode Scanner Event Listeners
+  document.getElementById('scanNewBarcode').addEventListener('click', () => startScanner('add_product'));
+  document.getElementById('scanStockBarcode').addEventListener('click', () => startScanner('add_stock'));
+  document.getElementById('scanSellBarcode').addEventListener('click', () => startScanner('sell'));
+  document.getElementById('closeScanner').addEventListener('click', stopScanner);
+
+
+  // render  
+  function renderProducts(filter=''){  
+    productList.innerHTML = '';  
+    
+    // Filter out dummy products
+    const realProducts = products.filter(p => !p.name.startsWith('__CATEGORY_'));
+
+    // Filter by Search Text
+    // IMPORTANT: When creating the filtered array, attach the original index (__i) 
+    // for use in button listeners (edit/delete/changeKg/changePc)
+    const filteredBySearch = realProducts.map((p,i)=>({...p,
+        __i:products.findIndex(pr => pr.name === p.name) // Find original index in 'products' array
+    })).filter(p => 
+      p.name.toLowerCase().includes(filter.toLowerCase()) || 
+      (p.barcode && p.barcode.includes(filter))
+    );  
+
+    // Filter by Category
+    const filtered = filteredBySearch.filter(p => {
+        if (currentCategoryFilter === 'all') return true;
+        // Use default categories if not explicitly set (e.g. legacy products)
+        const pCategory = p.category ? p.category.toLowerCase() : 'other'; 
+        return pCategory === currentCategoryFilter.toLowerCase(); // Use lower case for comparison
+    });
+
+    if(!filtered.length){ productList.innerHTML = '<p class="text-center text-gray-500">এই ক্যাটাগরিতে কোনো প্রোডাক্ট নেই</p>'; updateSummary(); populateStockDropdown(); populateCategoryDropdowns(); updateCategoryButtons(); return; }  
+  
+    filtered.forEach(p=>{  
+      const i = p.__i;  // Use the original index
+      const div = document.createElement('div');  
+      div.className = 'border p-3 rounded-lg bg-gray-50 flex items-center justify-between';  
+      
+      // Conditionally render secret buttons and data based on 'secretsVisible'
+      const isVisible = secretsVisible;
+      const editButtonHtml = isVisible ? 
+          `<button class="text-blue-600 font-semibold text-sm edit-product" data-i="${i}">✏️</button>` : 
+          `<button class="text-gray-400 font-semibold text-sm view-only" data-i="${i}" title="পরিবর্তন করতে আনলক করুন">✏️</button>`;
+      const deleteButtonHtml = isVisible ?
+          `<button class="text-red-600 font-semibold text-sm delete-product" data-i="${i}">🗑️</button>` : '';
+
+      const secretDataHtml = isVisible ?
+          `কেনার দাম: ৳${fmt(p.costPrice||0)} | লাভ: ৳${fmt(p.profitRate)} |` : '';
+
+      div.innerHTML = `  
+        <div class="flex items-center gap-3">
+          <div>
+              <div class="flex items-center gap-3 mb-1">
+                  <h3 class="font-semibold">${escapeHtml(p.name)} <span class="text-xs font-normal text-indigo-500">(${formatCategoryName(p.category || 'other')})</span></h3>
+                  ${editButtonHtml}
+                  ${deleteButtonHtml}
+              </div>
+              <p class="text-xs text-gray-400">বারকোড: ${p.barcode || 'নেই'}</p>
+              <p class="text-sm text-gray-500">
+                ${secretDataHtml}
+                বিক্রয় দাম: ৳${fmt(p.price)} | 
+                **মজুদ: ${fmt(p.stock||0)}**
+              </p>
+          </div>
+        </div>
+  
+        <div class="flex items-center gap-3">  
+          <div class="text-center">  
+            <button class="bg-red-500 text-white px-3 py-1 rounded text-lg font-bold" data-action="kgDec" data-i="${i}">−</button>  
+            <div class="mx-2 font-bold text-xl" id="kg-${i}">${fmt(p.kg||0)}</div>  
+            <button class="bg-green-500 text-white px-3 py-1 rounded text-lg font-bold" data-action="kgInc" data-i="${i}">+</button>  
+            <div class="text-xs text-gray-500 text-center">কেজি</div>  
+          </div>  
+          <div class="text-center">  
+            <button class="bg-red-500 text-white px-3 py-1 rounded text-lg font-bold" data-action="pcDec" data-i="${i}">−</button>  
+            <div class="mx-2 font-bold text-xl" id="pc-${i}">${p.pc||0}</div>  
+            <button class="bg-green-500 text-white px-3 py-1 rounded text-lg font-bold" data-action="pcInc" data-i="${i}">+</button>  
+            <div class="text-xs text-gray-500 text-center">পিছ</div>  
+          </div>  
+        </div>  
+      `;  
+      productList.appendChild(div);  
+    });  
+  
+    // attach delegated listeners
+    productList.querySelectorAll('[data-action="kgInc"]').forEach(b => b.addEventListener('click', e => changeKg(e.currentTarget.dataset.i, 0.25)));  
+    productList.querySelectorAll('[data-action="kgDec"]').forEach(b => b.addEventListener('click', e => changeKg(e.currentTarget.dataset.i, -0.25)));  
+    productList.querySelectorAll('[data-action="pcInc"]').forEach(b => b.addEventListener('click', e => changePc(e.currentTarget.dataset.i, 1)));  
+    productList.querySelectorAll('[data-action="pcDec"]').forEach(b => b.addEventListener('click', e => changePc(e.currentTarget.dataset.i, -1)));  
+    
+    // Protected action listeners
+    productList.querySelectorAll('.edit-product').forEach(b => b.addEventListener('click', e => openEditModal(parseInt(e.currentTarget.dataset.i))));  
+    productList.querySelectorAll('.delete-product').forEach(b => b.addEventListener('click', e => deleteProduct(parseInt(e.currentTarget.dataset.i))));  
+    // Listener for view-only edit button (prompts for unlock)
+    productList.querySelectorAll('.view-only').forEach(b => b.addEventListener('click', e => {
+      alert("প্রোডাক্ট এডিট করার জন্য আপনাকে অবশ্যই প্রথমে উপরে থাকা লক বাটনটি ব্যবহার করে গোপনীয় অংশগুলো আনলক করতে হবে।");
+    }));
+  
+    updateSummary();  
+    populateStockDropdown();
+    populateCategoryDropdowns(); // IMPORTANT: Update dropdowns whenever products change
+    updateCategoryButtons(); 
+  }  
+
+  // NEW: Category Filter Logic (Slightly improved for better visual update)
+  function updateCategoryButtons() {
+      // 1. Clear all buttons 
+      categoryFilterContainer.innerHTML = '';
+      
+      // 2. Identify all unique categories (including defaults and custom ones)
+      const categories = getAllCategories();
+      
+      // The list of categories to display in the filter, including 'all'
+      const filterCategories = ['all', ...categories];
+
+      // 3. Add all buttons to the container
+      filterCategories.forEach(category => {
+          const btn = document.createElement('button');
+          btn.className = 'category-button px-3 py-1 rounded-full text-sm font-semibold transition-colors duration-200';
+          btn.textContent = category === 'all' ? 'সকল পণ্য' : formatCategoryName(category);
+          btn.dataset.category = category;
+          
+          // Apply active state if it matches the current filter
+          if (category === currentCategoryFilter) {
+              btn.classList.add('active');
+          } else {
+              // Apply default style when not active
+              btn.classList.add('bg-white', 'text-gray-700', 'border');
+          }
+          
+          categoryFilterContainer.appendChild(btn);
+      });
+  }
+
+  // Delegated listener for category buttons
+  categoryFilterContainer.addEventListener('click', (e) => {
+      const btn = e.target.closest('.category-button');
+      if (btn) {
+          const newCategory = btn.dataset.category;
+          if (newCategory !== currentCategoryFilter) {
+              currentCategoryFilter = newCategory;
+              // Reset search input when changing category
+              searchInput.value = ''; 
+              renderProducts(); // Re-render to show filtered products
+          } else {
+              // If the same category is clicked, no need to re-render, but ensure visuals are correct
+              updateCategoryButtons();
+          }
+      }
+  });
+
+
+  // Stock Management Logic (MODIFIED)
+  function populateStockDropdown(){
+      stockProductIndex.innerHTML = '<option value="">-- প্রোডাক্ট বাছুন --</option>';
+      products.filter(p => !p.name.startsWith('__CATEGORY_')).forEach((p, i) => { // Filter dummy products
+          const option = document.createElement('option');
+          // *** FIX: Use product name as the value (since indices can shift due to filtering/dummys)
+          option.value = p.name; 
+          // Include category in dropdown for better visibility
+          option.textContent = `${p.name} (${formatCategoryName(p.category || 'other')}, মজুদ: ${fmt(p.stock||0)})`;
+          stockProductIndex.appendChild(option);
+      });
+  }
+  
+  document.getElementById('updateStockForm').addEventListener('submit', e => {
+      e.preventDefault();
+      // *** FIX: Get the product name (value) from the dropdown
+      const productName = stockProductIndex.value; 
+      const qty = parseFloat(document.getElementById('stockQuantity').value);
+  
+      // *** FIX: Find the product in the main 'products' array by name
+      const product = products.find(p => p.name === productName); 
+      const productIndex = products.findIndex(p => p.name === productName); // For clarity in console/debug
+
+      if (!product || isNaN(qty) || qty === 0) {
+          alert('সঠিক প্রোডাক্ট বাছুন এবং সঠিক পরিমাণ দিন।');
+          return;
+      }
+      
+      product.stock = (product.stock || 0) + qty;
+      
+      if (product.stock < 0) {
+        alert(`⚠️ স্টক ঋণাত্মক হয়ে যাচ্ছে। বর্তমান স্টক: ${fmt(product.stock)}`);
+      }
+  
+      saveProducts();
+      e.target.reset();
+      renderProducts(searchInput.value); // Re-render to show updated stock
+      alert(`✅ ${product.name} এর মজুদ আপডেট হয়েছে। বর্তমান মজুদ: ${fmt(product.stock)}`);
+  });
+  // END Stock Management Logic
+
+
+  // edit modal functions  
+  function openEditModal(index){  
+    // Check if secrets are visible/unlocked for editing sensitive fields
+    const isVisible = secretsVisible;
+    if (!isVisible) {
+        alert("প্রোডাক্ট এডিট করার জন্য আপনাকে অবশ্যই প্রথমে উপরে থাকা লক বাটনটি ব্যবহার করে গোপনীয় অংশগুলো আনলক করতে হবে।");
+        return; 
+    } 
+    
+    editingIndex = index;  
+    const p = products[index];  
+    
+    // Ensure category dropdown is populated before setting value
+    populateCategoryDropdowns(); 
+
+    editName.value = p.name || '';  
+    editCategory.value = p.category || 'other'; 
+    editCost.value = p.costPrice !== undefined ? p.costPrice : ''; 
+    editProfit.value = p.profitRate !== undefined ? p.profitRate : '';  
+    editPrice.value = p.price !== undefined ? p.price : '';  
+    editModal.classList.remove('hidden');  
+    editName.focus();  
+  }  
+  function closeEditModal(){ editingIndex = null; editModal.classList.add('hidden'); }  
+  
+  saveEdit.addEventListener('click', ()=>{  
+    if(editingIndex === null) return closeEditModal();  
+    
+    const name = editName.value.trim();  
+    const category = editCategory.value.trim() || 'other'; 
+    const price = parseFloat(editPrice.value); 
+    
+    if(!name || isNaN(price)){ alert('নাম, ক্যাটাগরি ও সঠিক বিক্রয় দাম দিন'); return; }
+        
+    products[editingIndex].name = name;
+    products[editingIndex].category = category; 
+    products[editingIndex].price = price;
+
+    if (secretsVisible) {
+      // If unlocked, save all fields
+      const cost = parseFloat(editCost.value); 
+      const profit = parseFloat(editProfit.value);  
+      
+      if(isNaN(cost)){ alert('সঠিক কেনার দাম দিন'); return; } 
+      if(isNaN(profit)){ alert('সঠিক লাভের সংখ্যা দিন'); return; }  
+      
+      products[editingIndex].costPrice = cost; 
+      products[editingIndex].profitRate = profit;  
+      alert('✅ প্রোডাক্ট আপডেট হয়েছে'); 
+    } else {
+        alert('✅ প্রোডাক্টের নাম, ক্যাটাগরি ও বিক্রয় দাম আপডেট হয়েছে');
+    }
+
+    saveProducts();
+    renderProducts(searchInput.value);  
+    updateSummary();  
+    closeEditModal();  
+  });  
+  
+  cancelEdit.addEventListener('click', ()=> closeEditModal());  
+  editModal.addEventListener('click', (ev)=>{ if(ev.target === editModal) closeEditModal(); });  
+  
+  // CRUD product helpers  
+  function deleteProduct(i){  
+    if (!secretsVisible) {
+        alert("প্রোডাক্ট মুছে ফেলার জন্য আপনাকে অবশ্যই প্রথমে উপরে থাকা লক বাটনটি ব্যবহার করে গোপনীয় অংশগুলো আনলক করতে হবে।");
+        return;
+    }
+    // Check if it's a dummy category product
+    if (products[i].name.startsWith('__CATEGORY_')) {
+        if(!confirm(`এই ক্যাটাগরি-প্রতিনিধিটি মুছে ফেললে নতুন তৈরি করা ক্যাটাগরি (${products[i].category}) টি ফিল্টার বাটন থেকে লুকিয়ে যেতে পারে। আপনি কি নিশ্চিত?`)) return;
+    } else if(!confirm('এই প্রোডাক্টটি মুছে ফেলতে চান?')) {
+        return;
+    }
+    
+    products.splice(i,1);  
+    saveProducts();  
+    renderProducts(searchInput.value);  
+    updateSummary();  
+  }  
+  
+  function changeKg(i, delta){  
+    i = parseInt(i);  
+    
+    const newKg = (products[i].kg||0) + delta;
+    
+    // Logic to check stock against new quantity 
+    if (delta > 0) {
+        const currentPc = products[i].pc || 0; 
+        const currentStock = products[i].stock || 0;
+        const totalSold = newKg + currentPc;
+        if (currentStock < totalSold) {
+            alert(`⚠️ ${products[i].name} এর পর্যাপ্ত স্টক নেই। প্রয়োজন: ${fmt(totalSold)}, মজুদ: ${fmt(currentStock)}`);
+            return; 
+        }
+    }
+    
+    products[i].kg = newKg;  
+    if(products[i].kg < 0) products[i].kg = 0;  
+    saveProducts();  
+    document.getElementById(`kg-${i}`).textContent = fmt(products[i].kg);  
+    updateSummary(); updateDueAmount();  
+  }  
+  function changePc(i, delta){  
+    i = parseInt(i);  
+    
+    const newPc = (products[i].pc||0) + delta;
+    
+    // Logic to check stock against new quantity (pc and kg count towards total stock for simplicity)
+    if (delta > 0) {
+        const currentKg = products[i].kg || 0; 
+        const currentStock = products[i].stock || 0;
+        const totalSold = newPc + currentKg;
+        if (currentStock < totalSold) {
+            alert(`⚠️ ${products[i].name} এর পর্যাপ্ত স্টক নেই। প্রয়োজন: ${fmt(totalSold)}, মজুদ: ${fmt(currentStock)}`);
+            return; 
+        }
+    }
+
+    products[i].pc = newPc;
+    if(products[i].pc < 0) products[i].pc = 0;
+    
+    saveProducts();  
+    document.getElementById(`pc-${i}`).textContent = products[i].pc;  
+    updateSummary(); updateDueAmount();  
+  }  
+  
+  // summary & bill calculations  
+  function updateSummary(){  
+    // Filter out dummy products
+    const realProducts = products.filter(p => !p.name.startsWith('__CATEGORY_'));
+
+    const totalQtyValue = realProducts.reduce((s,p)=> s + (p.kg||0) + (p.pc||0), 0);  
+    const sell = realProducts.reduce((s,p)=> s + ((p.kg||0) * (p.price||0)) + ((p.pc||0) * (p.price||0)), 0);  
+    
+    // Profit calculation now considers ALL memos (active + history)
+    const allMemos = [...memos, ...memoHistory];
+    const totalProfitValue = allMemos.reduce((s, m) => s + (m.totalProfit || 0), 0);
+    
+    totalQty.textContent = fmt(totalQtyValue);  
+    totalSell.textContent = '৳' + fmt(sell);  
+    
+    // Only update totalProfit if secrets are visible
+    if (secretsVisible) {
+        totalProfit.textContent = '৳' + fmt(totalProfitValue);
+        totalProfit.parentElement.classList.remove('hidden-by-default');
+    } else {
+        totalProfit.textContent = '৳???.??';
+        totalProfit.parentElement.classList.add('hidden-by-default');
+    }
+  }  
+  
+  function updateDueAmount(){  
+    const items = products.filter(p=> (p.kg||0) > 0 || (p.pc||0) > 0);  
+    const totalAmount = items.reduce((s,p)=> s + ((p.kg||0) * (p.price||0)) + ((p.pc||0) * (p.price||0)), 0);  
+    const discount = parseFloat(discountInput.value) || 0;  
+    const paid = parseFloat(paidInput.value) || 0;  
+    const grand = totalAmount - discount;  
+    const due = grand - paid;  
+    dueInput.value = due >= 0 ? fmt(due) : fmt(0);  
+  }  
+  discountInput.addEventListener('input', updateDueAmount);  
+  paidInput.addEventListener('input', updateDueAmount);  
+  
+  // add product  
+  document.getElementById('addProductForm').addEventListener('submit', e=>{  
+    e.preventDefault();  
+    const name = document.getElementById('productName').value.trim();  
+    const price = parseFloat(document.getElementById('productPrice').value);  
+    const category = productCategoryInput.value.trim();
+    
+    if(!category){ alert('⚠️ প্রোডাক্টের জন্য সঠিক ক্যাটাগরি বাছুন।'); return; }
+    
+    let costPrice = 0;
+    let profit = 0;
+    
+    if (secretsVisible) {
+      costPrice = parseFloat(productCostInput.value) || 0; 
+      profit = parseFloat(profitRateInput.value) || 0;  
+      if (isNaN(costPrice)){ alert('সঠিক কেনার দাম দিন'); return; }
+    } else {
+      // If not authenticated, ensure selling price is valid
+      if(isNaN(price) || !name){ alert('নাম ও সঠিক বিক্রয় দাম দিন'); return; }
+    }
+    
+    const barcode = productBarcodeInput.value.trim() || null;
+    
+    if(!name || isNaN(price)){ alert('নাম ও সঠিক দাম দিন'); return; }  
+    
+    // Check for duplicate barcode in real products
+    if (barcode && products.some(p => p.barcode === barcode && !p.name.startsWith('__CATEGORY_'))) {
+        alert('⚠️ এই বারকোডটি অন্য একটি পণ্যের সাথে ইতিমধ্যেই যুক্ত আছে।');
+        return;
+    }
+    
+    // Check for duplicate name in real products
+    if (products.some(p => p.name.toLowerCase() === name.toLowerCase() && !p.name.startsWith('__CATEGORY_'))) {
+        alert('⚠️ এই নামের একটি পণ্য ইতিমধ্যেই আছে।');
+        return;
+    }
+
+    products.push({ name, category, costPrice: costPrice, price, profitRate: profit, barcode, kg: 0, pc: 0, stock: 0 }); 
+    saveProducts();  
+    e.target.reset();  
+    renderProducts();  
+  });  
+  
+  // create memo (MODIFIED: Saves to memos, then copies to history upon delete/permanent save)
+  document.getElementById('createMemo').addEventListener('click', ()=>{  
+    const items = products.filter(p=> (p.kg||0) > 0 || (p.pc||0) > 0);  
+    if(items.length === 0){ alert('প্রথমে পণ্য যোগ করুন'); return; }  
+  
+    const totalAmount = items.reduce((s,p)=> s + ((p.kg||0) * p.price) + ((p.pc||0) * p.price), 0);  
+    const totalProfit = items.reduce((s,p)=> s + (((p.kg||0) + (p.pc||0)) * (p.profitRate||0)), 0); 
+    const discount = parseFloat(discountInput.value) || 0;  
+    const paid = parseFloat(paidInput.value) || 0;  
+    const due = totalAmount - discount - paid;  
+
+    let deductionSuccessful = true;
+    const itemsToDeduct = [];
+    for(const item of items) {
+        // Find the index of the product by name.
+        const index = products.findIndex(p => p.name === item.name); 
+        // Stock deduction is based on the total quantity sold (kg + pc)
+        const soldQty = (item.kg || 0) + (item.pc || 0);
+
+        if (index === -1) {
+             console.warn(`Product "${item.name}" not found during memo creation. Skipping stock deduction.`);
+             continue;
+        }
+
+        if ((products[index].stock || 0) < soldQty) {
+            alert(`⚠️ মেমো তৈরি করা সম্ভব নয়। "${item.name}" এর পর্যাপ্ত স্টক নেই। প্রয়োজন: ${fmt(soldQty)}, মজুদ: ${fmt(products[index].stock || 0)}`);
+            deductionSuccessful = false;
+            break;
+        }
+        itemsToDeduct.push({ index, soldQty });
+    }
+    
+    if(!deductionSuccessful) return; 
+  
+    const memo = {  
+      id: Date.now(),  
+      serial,  
+      date: new Date().toLocaleString(),  
+      customer: {  
+        name: document.getElementById('custName').value || '',  
+        phone: document.getElementById('custPhone').value || '',  
+        addr: document.getElementById('custAddr').value || ''  
+      },  
+      items: items.map(p => ({ 
+        name: p.name, 
+        category: p.category || 'other', 
+        kg: p.kg||0, 
+        pc: p.pc||0, 
+        price: p.price||0, 
+        profitRate: p.profitRate || 0, 
+        profit: ((p.kg||0) + (p.pc||0)) * (p.profitRate||0) 
+      })),  
+      total: totalAmount,  
+      totalProfit: totalProfit, 
+      discount,  
+      paid,  
+      due,
+    };  
+  
+    memos.push(memo); saveMemos(); serial++; saveSerial();  
+  
+    // Deduct stock after successful memo creation
+    itemsToDeduct.forEach(deduction => {
+        products[deduction.index].stock -= deduction.soldQty;
+    });
+
+    // Reset selling quantity after memo creation
+    products.forEach(p => { p.kg = 0; p.pc = 0; });  
+    saveProducts(); 
+
+    document.getElementById('custName').value = '';  
+    document.getElementById('custPhone').value = '';  
+    document.getElementById('custAddr').value = '';  
+    discountInput.value = ''; paidInput.value = ''; dueInput.value = '';  
+  
+    renderProducts();  
+    renderHistory(memos, memoHistoryDiv, 'active');  
+    showMemo(memo);  
+    alert('🧾 মেমো তৈরি হয়েছে ও ইনভেন্টরি আপডেট হয়েছে');  
+  });  
+  
+  // print / pdf functions
+  function printMemo(id, isHistory = false){  
+    const memoArray = isHistory ? memoHistory : memos;
+    const m = memoArray.find(x=> x.id === id);  
+    if(!m) return alert('মেমো পাওয়া যায়নি');  
+    const w = window.open('', '', 'width=800,height=600');  
+    w.document.write('<html><head><title>মেমো</title></head><body>');  
+    w.document.write(generateMemoInnerHTML(m));  
+    w.document.write('</body></html>');  
+    w.document.close(); w.focus();  
+    setTimeout(()=> { w.print(); w.close(); }, 300);  
+  }  
+  
+  async function pdfMemo(id, isHistory = false){  
+    const memoArray = isHistory ? memoHistory : memos;
+    const m = memoArray.find(x=> x.id === id);  
+    if(!m) return alert('মেমো পাওয়া যায়নি');  
+    const container = document.createElement('div');  
+    container.style.width = '800px'; container.style.padding='20px'; container.style.background='white';  
+    container.innerHTML = generateMemoInnerHTML(m);  
+    document.body.appendChild(container);  
+    try{  
+      const canvas = await html2canvas(container, { scale: 2 });  
+      const img = canvas.toDataURL('image/png');  
+      const { jsPDF } = window.jspdf;  
+      const pdf = new jsPDF({ unit:'pt', format:'a4' });  
+      const pdfWidth = pdf.internal.pageSize.getWidth();  
+      const imgProps = pdf.getImageProperties(img);  
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;  
+      pdf.addImage(img, 'PNG', 0, 0, pdfWidth, pdfHeight);  
+      pdf.save(`memo_${m.serial}.pdf`);  
+    }catch(err){ console.error(err); alert('PDF তৈরিতে সমস্যা হয়েছে'); }  
+    finally{ document.body.removeChild(container); }  
+  }  
+  
+  function generateMemoInnerHTML(m){  
+    return `<div style="text-align:center"><h2>🏪 RKB স্টোর</h2><p style="font-size:12px">ঠিকানা: তোমার ঠিকানা | ফোন: ০১৭০০-০০০০০</p><hr/></div>  
+      <div style="font-size:12px;margin-top:6px;"><div><strong>মেমো নং:</strong> ${m.serial}</div><div><strong>তারিখ:</strong> ${m.date}</div>  
+      ${m.customer.name?`<div><strong>নাম:</strong> ${escapeHtml(m.customer.name)}</div>`:''}  
+      ${m.customer.phone?`<div><strong>মোবাইল:</strong> ${escapeHtml(m.customer.phone)}</div>`:''}  
+      ${m.customer.addr?`<div><strong>ঠিকানা:</strong> ${escapeHtml(m.customer.addr)}</div>`:''}</div>  
+      <table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:12px;">  
+        <tr style="background:#f3f3f3"><th style="border:1px solid #ddd;padding:6px">#</th><th style="border:1px solid #ddd;padding:6px">পণ্য (ক্যাটাগরি)</th><th style="border:1px solid #ddd;padding:6px">কেজি</th><th style="border:1px solid #ddd;padding:6px">পিছ</th><th style="border:1px solid #ddd;padding:6px">দাম</th><th style="border:1px solid #ddd;padding:6px">মোট</th></tr>  
+        ${m.items.map((it,idx)=>`<tr><td style="border:1px solid #ddd;padding:6px">${idx+1}</td><td style="border:1px solid #ddd;padding:6px">${escapeHtml(it.name)} (${formatCategoryName(it.category || 'other')})</td><td style="border:1px solid #ddd;padding:6px">${fmt(it.kg)}</td><td style="border:1px solid #ddd;padding:6px">${it.pc}</td><td style="border:1px solid #ddd;padding:6px">৳${fmt(it.price)}</td><td style="border:1px solid #ddd;padding:6px">৳${fmt((it.kg*it.price + it.pc*it.price))}</td></tr>`).join('')}  
+      </table>  
+      <div style="text-align:right;margin-top:8px;font-weight:bold;">মোট: ৳${fmt(m.total)}</div>  
+      <div style="text-align:right;margin-top:2px;">ডিসকাউন্ট: ৳${fmt(m.discount)} | পরিশোধিত: ৳${fmt(m.paid)} | বাকি: ৳${fmt(m.due)}</div>  
+      <p style="text-align:center;font-size:11px;margin-top:8px;">ধন্যবাদ — আবার আসবেন 🙏</p>`;  
+  }  
+  
+  // *************************************************************
+  // মেমো বাতিল করার ফাংশন (Cancel Memo - Restores Stock & Financials - FROM ACTIVE MEMOS)
+  // *************************************************************
+  function cancelMemo(id){  
+      // 1. সুরক্ষা পরীক্ষা
+      if(!secretsVisible) {
+          alert("⚠️ মেমো বাতিল করার জন্য আপনাকে অবশ্যই প্রথমে উপরে থাকা লক বাটনটি ব্যবহার করে গোপনীয় অংশগুলো আনলক করতে হবে।");
+          return;
+      }
+      
+      // 2. নিশ্চিতকরণ বার্তা
+      if(!confirm('🚨 আপনি কি এই মেমোটি বাতিল (Cancel) করতে নিশ্চিত? বাতিল করলে পণ্যের স্টক এবং লাভ-ক্ষতির হিসাব পুনরুদ্ধার করা হবে। নিশ্চিত করতে "OK" চাপুন।')) return;  
+      
+      // 3. মেমো খুঁজে বের করা
+      const memoIndex = memos.findIndex(m => m.id === id);
+      if(memoIndex === -1) {
+          alert("⚠️ মেমোটি খুঁজে পাওয়া যায়নি।");
+          return;
+      }
+      const memoToDelete = memos[memoIndex];
+
+      // 4. স্টক পুনরুদ্ধার (Restore Stock)
+      memoToDelete.items.forEach(item => {
+          // *** FIX: Find product by name
+          const product = products.find(p => p.name === item.name); 
+          if (product) {
+              const soldQty = (item.kg || 0) + (item.pc || 0);
+              product.stock = (product.stock || 0) + soldQty; 
+          } else {
+              console.warn(`Product "${item.name}" not found for stock restoration. Stock remains unchanged for this item.`);
+          }
+      });
+
+      // 5. মেমো অ্যারে থেকে মুছে ফেলা (বাতিল মানেও মুছে ফেলা)
+      memos.splice(memoIndex, 1);
+      
+      // 6. পরিবর্তনগুলো সেভ করা এবং রেন্ডার আপডেট করা
+      saveProducts();    
+      saveMemos();    
+
+      renderHistory(memos, memoHistoryDiv, 'active');           
+      renderProducts(searchInput.value); 
+      updateSummary();           
+      
+      if(currentMemo && currentMemo.id === id){ 
+          memoArea.classList.add('hidden'); 
+          currentMemo = null; 
+      }  
+      
+      alert(`✅ মেমো ${memoToDelete.serial} সফলভাবে বাতিল করা হয়েছে। স্টক এবং লাভ-ক্ষতির হিসাব পুনরুদ্ধার করা হয়েছে।`);
+  }
+  
+  // *************************************************************
+  // স্থায়ীভাবে সেভ করার ফাংশন (Delete to Permanent History - NO STOCK RESTORE)
+  // *************************************************************
+  function deleteToPermanentHistory(id) {
+       // 1. সুরক্ষা পরীক্ষা
+       if(!secretsVisible) {
+          alert("⚠️ মেমো স্থায়ীভাবে সেভ করার জন্য আপনাকে অবশ্যই প্রথমে উপরে থাকা লক বাটনটি ব্যবহার করে গোপনীয় অংশগুলো আনলক করতে হবে।");
+          return;
+      }
+      
+      // 2. নিশ্চিতকরণ বার্তা (Permanent Save)
+      if(!confirm('💾 আপনি কি এই মেমোটি **ইতিহাসে সংরক্ষণ** করে সক্রিয় তালিকা থেকে মুছে ফেলতে চান? মনে রাখবেন, স্টক পুনরুদ্ধার হবে না, কিন্তু লাভ রিপোর্টে হিসাব থাকবে।')) return;  
+
+      // 3. মেমো খুঁজে বের করা এবং কপি তৈরি
+      const memoIndex = memos.findIndex(m => m.id === id);
+      if(memoIndex === -1) {
+          alert("⚠️ মেমোটি খুঁজে পাওয়া যায়নি।");
+          return;
+      }
+      
+      const memoToSave = memos[memoIndex];
+      // Note: We move the memo, the profit calculation remains because the profit is calculated from ALL memos (active + history)
+
+      // 4. মেমো হিস্ট্রিতে যোগ করা এবং সক্রিয় তালিকা থেকে মুছে ফেলা
+      memoHistory.push(memoToSave);
+      memos.splice(memoIndex, 1);
+      
+      // 5. পরিবর্তনগুলো সেভ করা এবং রেন্ডার আপডেট করা
+      saveMemos();    
+      saveMemoHistory();
+      
+      renderHistory(memos, memoHistoryDiv, 'active'); // Re-render active memos
+      
+      if(currentMemo && currentMemo.id === id){ 
+          memoArea.classList.add('hidden'); 
+          currentMemo = null; 
+      }  
+      
+      alert(`✅ মেমো ${memoToSave.serial} সফলভাবে পুরোনো ইতিহাসে সংরক্ষণ করা হয়েছে।`);
+  }
+
+  // *************************************************************
+  // ইতিহাস থেকে স্থায়ীভাবে মুছে ফেলা (Permanent Delete from History)
+  // *************************************************************
+  function deleteMemoPermanentlyFromHistory(id){  
+      if(!confirm('🚨 আপনি কি এই মেমোটি **চিরতরে মুছে ফেলতে** চান? এর লাভ রিপোর্ট থেকেও মুছে যাবে। এই পদক্ষেপটি আর ফিরিয়ে আনা যাবে না।')) return;  
+      
+      const memoIndex = memoHistory.findIndex(m => m.id === id);
+      if(memoIndex === -1) {
+          alert("⚠️ মেমোটি খুঁজে পাওয়া যায়নি।");
+          return;
+      }
+      const memoToDelete = memoHistory[memoIndex];
+
+      memoHistory.splice(memoIndex, 1);
+      
+      saveMemoHistory();    
+      updateSummary(); // Re-calculate total profit
+      renderHistory(memoHistory, permanentMemoHistoryDiv, 'history'); // Re-render the history modal
+      
+      if(currentMemo && currentMemo.id === id){ 
+          memoArea.classList.add('hidden'); 
+          currentMemo = null; 
+      }  
+      
+      alert(`✅ মেমো ${memoToDelete.serial} স্থায়ীভাবে মুছে ফেলা হয়েছে।`);
+  }
+
+  // show memo (UPDATED to include Cancel and Permanent Save/Delete buttons)
+  function showMemo(m, isHistory = false){  
+      currentMemo = m;  
+      memoArea.classList.remove('hidden');  
+      
+      // বাতিল বাটন (স্টক পুনরুদ্ধার সহ - শুধু Active Memos-এর জন্য)
+      const cancelButtonHtml = !isHistory && secretsVisible ? 
+          `<button class="bg-red-500 text-white px-3 py-1 rounded" onclick="cancelMemo(${m.id})">↩️ বাতিল (স্টক পুনরুদ্ধার)</button>` : 
+          !isHistory && `<button class="bg-gray-400 text-white px-3 py-1 rounded" title="বাতিল করতে আনলক করুন">🔒 বাতিল</button>`;
+          
+      // স্থায়ীভাবে সেভ বাটন (ইতিহাসে যুক্ত হবে - শুধু Active Memos-এর জন্য)
+      const deleteButtonHtml = !isHistory && secretsVisible ? 
+          `<button class="bg-gray-700 text-white px-3 py-1 rounded" onclick="deleteToPermanentHistory(${m.id})">💾 স্থায়ীভাবে সেভ</button>` : 
+          !isHistory && `<button class="bg-gray-400 text-white px-3 py-1 rounded" title="স্থায়ীভাবে সেভ করতে আনলক করুন">🔒 সেভ</button>`;
+          
+      // ইতিহাস থেকে ডিলিট বাটন (শুধু Permanent History-এর জন্য)
+      const permanentDeleteButtonHtml = isHistory && secretsVisible ?
+          `<button class="bg-red-800 text-white px-3 py-1 rounded" onclick="deleteMemoPermanentlyFromHistory(${m.id})">🗑️ স্থায়ীভাবে ডিলিট (রিপোর্ট সহ)</button>` : '';
+
+      memoArea.innerHTML = `  
+        <div class="text-center mb-2">  
+          <h3 class="font-bold text-lg">🏪 RKB স্টোর</h3>  
+        </div>  
+        <div class="text-sm mb-2">  
+          মেমো: ${m.serial} | তারিখ: ${m.date}<br>  
+          ${m.customer.name?`নাম: ${escapeHtml(m.customer.name)}<br>`:''}  
+          ${m.customer.phone?`মোবাইল: ${escapeHtml(m.customer.phone)}<br>`:''}  
+          ${m.customer.addr?`ঠিকানা: ${escapeHtml(m.customer.addr)}`:''}</div>  
+        </div>  
+        <table class="w-full border-collapse text-sm">  
+          <tr class="bg-gray-200"><th class="border p-1">#</th><th class="border p-1">পণ্য</th><th class="border p-1">কেজি</th><th class="border p-1">পিছ</th><th class="border p-1">দাম</th><th class="border p-1">মোট</th></tr>  
+          ${m.items.map((it,idx)=>`<tr><td class="border p-1 text-center">${idx+1}</td><td class="border p-1">${escapeHtml(it.name)} (${formatCategoryName(it.category || 'other')})</td><td class="border p-1 text-center">${fmt(it.kg)}</td><td class="border p-1 text-center">${it.pc}</td><td class="border p-1 text-right">৳${fmt(it.price)}</td><td class="border p-1 text-right">৳${fmt((it.kg*it.price + it.pc*it.price))}</td></tr>`).join('')}  
+        </table>  
+        <div class="text-right mt-2">  
+          <p>ডিসকাউন্ট: ৳${fmt(m.discount)}</p>  
+          <p>পরিশোধিত: ৳${fmt(m.paid)}</p>  
+          <p class="font-bold">বাকি: ৳${fmt(m.due)}</p>  
+          <p class="font-bold text-lg mt-1">মোট: ৳${fmt(m.total)}</p>  
+        </div>  
+        <div class="flex justify-end gap-2 mt-3">  
+          <button class="bg-green-600 text-white px-3 py-1 rounded" onclick="printMemo(${m.id}, ${isHistory})">🖨️ প্রিন্ট</button>  
+          <button class="bg-indigo-600 text-white px-3 py-1 rounded" onclick="pdfMemo(${m.id}, ${isHistory})">📄 PDF</button>  
+          ${cancelButtonHtml || ''}
+          ${deleteButtonHtml || ''}
+          ${permanentDeleteButtonHtml || ''}
+        </div>  
+      `;  
+      setTimeout(()=> window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 120);  
+  }  
+    
+  // renderHistory ফাংশন আপডেট করা হয়েছে
+  function renderHistory(memoArray, targetDiv, mode){  
+      targetDiv.innerHTML = '';  
+      
+      if(!memoArray.length){ 
+          targetDiv.innerHTML = `<p class="text-center text-gray-500">কোনো ${mode === 'active' ? 'সক্রিয়' : 'পুরোনো'} মেমো নেই</p>`; 
+          return; 
+      }  
+      
+      memoArray.slice().reverse().forEach(m=>{  
+        const div = document.createElement('div');  
+        div.className = `border p-2 rounded ${mode === 'active' ? 'bg-gray-50' : 'bg-orange-50 border-orange-200'} flex justify-between items-center`;  
+        
+        const profitDisplay = secretsVisible ? `(লাভ: ৳${fmt(m.totalProfit||0)})` : '';
+        const historyText = mode === 'history' ? '(পুরোনো)' : '';
+        
+        // বাটন তৈরি
+        const viewButton = document.createElement('button');
+        viewButton.className = "bg-blue-600 text-white px-2 py-1 rounded text-xs";
+        viewButton.textContent = 'দেখুন';
+        viewButton.onclick = ()=> showMemo(m, mode === 'history'); // Pass isHistory flag
+
+        const printButton = document.createElement('button');
+        printButton.className = "bg-green-600 text-white px-2 py-1 rounded text-xs";
+        printButton.textContent = '🖨️';
+        printButton.onclick = ()=> printMemo(m.id, mode === 'history');
+
+        const pdfButton = document.createElement('button');
+        pdfButton.className = "bg-indigo-600 text-white px-2 py-1 rounded text-xs";
+        pdfButton.textContent = '📄';
+        pdfButton.onclick = ()=> pdfMemo(m.id, mode === 'history');
+        
+        // Active Memos-এর জন্য বাতিল বাটন (Delete/Restore Stock)
+        let actionButton;
+        if (mode === 'active') {
+             actionButton = document.createElement('button');
+             actionButton.className = `bg-red-500 text-white px-2 py-1 rounded text-xs ml-1 ${secretsVisible ? '' : 'hidden'}`;
+             actionButton.textContent = '↩️ বাতিল';
+             actionButton.onclick = ()=> cancelMemo(m.id);
+        } else if (mode === 'history') {
+             // Permanent Save/Delete Button for History Memos
+             actionButton = document.createElement('button');
+             actionButton.className = `bg-red-800 text-white px-2 py-1 rounded text-xs ml-1 ${secretsVisible ? '' : 'hidden'}`;
+             actionButton.textContent = '🗑️ স্থায়ীভাবে ডিলিট';
+             actionButton.onclick = ()=> deleteMemoPermanentlyFromHistory(m.id);
+        }
+
+        div.innerHTML = `<div><p class="font-semibold">মেমো ${m.serial} ${historyText} — ৳${fmt(m.total)} ${profitDisplay}</p><p class="text-xs text-gray-500">${m.date}</p></div>  
+          <div class="flex gap-2 items-center">  
+          </div>`;  
+        
+        // বাটনগুলো যোগ করা
+        const actionContainer = div.querySelector('.flex.gap-2');
+        actionContainer.appendChild(viewButton);
+        actionContainer.appendChild(printButton);
+        actionContainer.appendChild(pdfButton);
+        if (actionButton) {
+            actionContainer.appendChild(actionButton);
+        }
+
+        targetDiv.appendChild(div);  
+      });  
+  }  
+  
+  // Permanent History Modal Logic
+  showPermanentHistoryButton.addEventListener('click', () => {
+      if (secretsVisible) {
+          renderHistory(memoHistory, permanentMemoHistoryDiv, 'history');
+          permanentHistoryModal.classList.remove('hidden');
+      } else {
+          alert("পুরোনো ইতিহাস দেখতে হলে আপনাকে অবশ্যই আনলক করতে হবে।");
+      }
+  });
+
+  document.getElementById('closePermanentHistoryModal').addEventListener('click', () => permanentHistoryModal.classList.add('hidden'));
+  permanentHistoryModal.addEventListener('click', (ev) => {
+      if (ev.target === permanentHistoryModal) permanentHistoryModal.classList.add('hidden');
+  });
+  
+  // *************************************************************
+  // ১ বছর পর পর পুরোনো মেমো মুছে ফেলার ফাংশন (NEW)
+  // *************************************************************
+  function autoDeleteOldHistory() {
+      const oneYearAgo = Date.now() - (365 * 24 * 60 * 60 * 1000); // 1 year in milliseconds
+      let deletedCount = 0;
+
+      // Filter out memos older than 1 year
+      const newHistory = memoHistory.filter(m => {
+          // Parse the date saved in "DD/MM/YYYY, HH:MM:SS PM" format
+          // Recreate Date object based on the saved string (assuming it's a valid locale string)
+          const memoDate = new Date(m.date);
+          
+          if (isNaN(memoDate.getTime())) {
+              // Fallback for badly formatted dates (keep them if date is invalid)
+              return true;
+          }
+          
+          if (memoDate.getTime() < oneYearAgo) {
+              deletedCount++;
+              return false; // Delete this memo
+          }
+          return true; // Keep this memo
+      });
+
+      if (deletedCount > 0) {
+          memoHistory = newHistory;
+          saveMemoHistory();
+          console.log(`✅ ${deletedCount} টি পুরোনো মেমো ইতিহাস থেকে মুছে ফেলা হয়েছে (১ বছরের বেশি পুরোনো)।`);
+          // Optionally, alert the user only if they are logged in
+          if (secretsVisible) {
+             alert(`✅ ${deletedCount} টি পুরোনো মেমো ইতিহাস থেকে মুছে ফেলা হয়েছে (১ বছরের বেশি পুরোনো)।`);
+          }
+      }
+  }
+
+
+  // clear all qtys  
+  document.getElementById('clearQty').addEventListener('click', ()=> {  
+    if(!confirm('সব প্রোডাক্টের পরিমাণ রিসেট করবেন?')) return;  
+    products.forEach(p=>{ p.kg = 0; p.pc = 0; });  
+    document.getElementById('custName').value = '';  
+    document.getElementById('custPhone').value = '';  
+    document.getElementById('custAddr').value = ''; 
+    discountInput.value = ''; paidInput.value = ''; dueInput.value = '';  
+    saveProducts(); renderProducts(); updateSummary();  
+  });  
+  
+  // search  
+  searchInput.addEventListener('input', e=> renderProducts(e.target.value));  
+
+  // Report Modal Logic (MODIFIED: Profit is calculated from memos + memoHistory)
+  document.getElementById('openReport').addEventListener('click', () => {
+      // Check if visible
+      if (!secretsVisible) {
+          alert("রিপোর্ট দেখতে হলে আপনাকে অবশ্যই প্রথমে উপরে থাকা লক বাটনটি ব্যবহার করে গোপনীয় অংশগুলো আনলক করতে হবে।");
+          return;
+      } else {
+          openReportModal();
+      }
+  });
+  document.getElementById('closeReport').addEventListener('click', () => reportModal.classList.add('hidden'));
+
+  function openReportModal() {
+      // This is only called if secrets are visible
+      renderReports();
+      reportModal.classList.remove('hidden');
+      
+      // Attach listeners after rendering the report content
+      const expenseFormModal = document.getElementById('addExpenseFormModal');
+      if (expenseFormModal) {
+          expenseFormModal.addEventListener('submit', handleExpenseSubmission);
+      }
+      
+      document.querySelectorAll('.delete-expense-in-modal').forEach(b => {
+          b.addEventListener('click', (e) => {
+              const id = parseInt(e.currentTarget.dataset.id);
+              deleteExpense(id); // Use the refactored delete function
+          });
+      });
+  }
+
+  function renderReports() {
+      // Get all memos for comprehensive reporting
+      const allMemos = [...memos, ...memoHistory];
+      
+      // **1. Expense Logging Form and Daily History**
+      let expenseLoggingAndDailyHistory = generateDailyExpenseHtml();
+      
+      // Filter out dummy products from report
+      const realProducts = products.filter(p => !p.name.startsWith('__CATEGORY_'));
+
+      // 2. Inventory Report 
+      let inventoryHtml = '<h4 class="font-bold text-lg border-b pb-1">ইনভেন্টরি রিপোর্ট (বর্তমান মজুদ)</h4>';
+      inventoryHtml += '<ul class="list-disc list-inside space-y-1 text-sm">';
+      const inStock = realProducts.filter(p => p.stock > 0).sort((a,b)=> a.name.localeCompare(b.name));
+      if (inStock.length > 0) {
+          inventoryHtml += inStock.map(p => {
+              // Always render secret info here as this function is only called when secretsVisible is true
+              const secretText = secretsVisible ? 
+                  ` (<span class="text-red-700">কেনার দাম: ৳${fmt(p.costPrice||0)}</span> | বিক্রয় দাম: ৳${fmt(p.price)} | প্রতি ইউনিট লাভ: ৳${fmt(p.profitRate)})` :
+                  ` (বিক্রয় দাম: ৳${fmt(p.price)})`; 
+              return `<li>**${escapeHtml(p.name)}** (${formatCategoryName(p.category || 'other')}, মজুদ): **${fmt(p.stock)}** ইউনিট${secretText}</li>`;
+          }).join('');
+      } else {
+          inventoryHtml += '<li>⚠️ কোনো প্রোডাক্ট মজুত নেই।</li>';
+      }
+      inventoryHtml += '</ul>';
+
+      // Profit Calculation (from ALL memos)
+      let dailyProfit = 0;
+      let monthlyProfit = 0;
+      let grandTotalProfit = 0; 
+      let grandTotalSale = 0; 
+      let grandTotalDue = 0; 
+
+      allMemos.forEach(m => {
+          // Date parsing logic remains same (from previous version)
+          const parts = m.date.split(', ');
+          const datePart = parts[0].split('/'); 
+          
+          let memoDate;
+          try {
+             memoDate = new Date(m.date);
+             if(isNaN(memoDate.getTime())) {
+                const [d, mo, y] = datePart;
+                memoDate = new Date(`${mo}/${d}/${y} ${parts[1]}`);
+             }
+          } catch(e) {
+             memoDate = new Date(); 
+          }
+          
+          const memoTotalProfit = m.totalProfit || 0;
+          const memoTotalSale = m.total || 0; 
+          
+          grandTotalProfit += memoTotalProfit; 
+          grandTotalSale += memoTotalSale; 
+          grandTotalDue += m.due || 0; 
+          
+          if (memoDate.toDateString() === new Date().toDateString()) {
+              dailyProfit += memoTotalProfit;
+          }
+
+          const currentMonth = new Date().getMonth();
+          const currentYear = new Date().getFullYear();
+          if (memoDate.getMonth() === currentMonth && memoDate.getFullYear() === currentYear) {
+              monthlyProfit += memoTotalProfit;
+          }
+      });
+      
+      // Expense Calculations
+      let totalStoreExpense = 0;
+      let totalWithdrawal = 0;
+      let totalFamilyExpense = 0;
+      let totalPersonalExpense = 0;
+      let grandTotalExpense = 0;
+
+      expenses.forEach(e => {
+          grandTotalExpense += e.amount;
+          switch(e.category) {
+              case 'store':
+                  totalStoreExpense += e.amount;
+                  break;
+              case 'withdrawal':
+                  totalWithdrawal += e.amount;
+                  break;
+              case 'family':
+                  totalFamilyExpense += e.amount;
+                  break;
+              case 'personal':
+                  totalPersonalExpense += e.amount;
+                  break;
+          }
+      });
+      
+      // Conditional Profit Display in Report (Only runs if secretsVisible)
+      let profitHtml = '';
+      let memoProfitHtml = '';
+      let expenseReportHtml = ''; 
+
+      if (secretsVisible) {
+          profitHtml = '<h4 class="font-bold text-lg border-b pb-1 mt-4">লাভ রিপোর্ট (মোট হিসাব)</h4>';
+          profitHtml += `<div class="grid grid-cols-3 gap-2 text-center">
+              <div class="bg-green-100 p-2 rounded-lg">
+                  <p class="text-sm">দৈনিক লাভ (${new Date().toLocaleDateString('bn-BD', { day: 'numeric', month: 'short' })})</p>
+                  <h5 class="font-bold text-xl text-green-700">৳${fmt(dailyProfit)}</h5>
+              </div>
+              <div class="bg-green-100 p-2 rounded-lg col-span-2">
+                  <p class="text-sm">মাসিক লাভ (${new Date().toLocaleDateString('bn-BD', { month: 'long', year: 'numeric' })})</p>
+                  <h5 class="font-bold text-xl text-green-700">৳${fmt(monthlyProfit)}</h5>
+              </div>
+          </div>`;
+
+          memoProfitHtml = '<h4 class="font-bold text-lg border-b pb-1 mt-4">মেমো অনুসারে লাভ রিপোর্ট (সকল মেমো)</h4>';
+          
+          if (allMemos.length > 0) {
+              memoProfitHtml += '<table class="w-full border-collapse text-sm mt-2">';
+              memoProfitHtml += '<thead><tr class="bg-gray-200"><th class="border p-1">মেমো নং ও তারিখ</th><th class="border p-1">মোট বিক্রি (৳)</th><th class="border p-1">লাভের পরিমাণ (৳)</th></tr></thead>'; 
+              memoProfitHtml += '<tbody>';
+
+              allMemos.slice().reverse().forEach(m => {
+                  const profit = m.totalProfit || 0;
+                  const sale = m.total || 0; 
+                  
+                  const parts = m.date.split(', ');
+                  const datePart = parts[0].split('/'); 
+                  
+                  let memoDate;
+                  try {
+                    memoDate = new Date(m.date);
+                    if(isNaN(memoDate.getTime())) {
+                       const [d, mo, y] = datePart;
+                       memoDate = new Date(`${mo}/${d}/${y} ${parts[1]}`);
+                    }
+                  } catch(e) {
+                     memoDate = new Date(); 
+                  }
+                  
+                  const isToday = memoDate.toDateString() === new Date().toDateString();
+                  
+                  let rowClass = isToday ? 'bg-red-50 font-semibold border-2 border-red-500' : '';
+                  const isHistory = memoHistory.some(h => h.id === m.id);
+                  if (isHistory) rowClass = 'bg-orange-100 text-orange-800 italic border-orange-500';
+
+                  const todayMark = isToday ? ' 🔴 (আজকের)' : '';
+                  const historyMark = isHistory ? ' 🗓️ (ইতিহাস)' : '';
+
+
+                  memoProfitHtml += `<tr class="${rowClass}"><td class="border p-1 text-center">মেমো ${m.serial} ${todayMark} ${historyMark}</td><td class="border p-1 text-right text-blue-600">৳${fmt(sale)}</td><td class="border p-1 text-right text-green-600">৳${fmt(profit)}</td></tr>`;
+              });
+
+              memoProfitHtml += '</tbody></table>';
+              
+              memoProfitHtml += `<div class="grid grid-cols-3 gap-2 mt-4 text-center">
+                  <div class="bg-blue-100 p-2 rounded-lg border border-blue-400">
+                      <p class="text-sm font-semibold">সকল মেমোর মোট বিক্রি</p>
+                      <h5 class="font-bold text-xl text-blue-800">৳${fmt(grandTotalSale)}</h5>
+                  </div>
+                  <div class="bg-green-100 p-2 rounded-lg border border-green-400">
+                      <p class="text-sm font-semibold">সকল মেমোর মোট লাভ</p>
+                      <h5 class="font-bold text-xl text-green-800">৳${fmt(grandTotalProfit)}</h5>
+                  </div>
+                  <div class="bg-yellow-100 p-2 rounded-lg border border-yellow-400">
+                      <p class="text-sm font-semibold">মোট বকেয়া</p>
+                      <h5 class="font-bold text-xl text-yellow-800">৳${fmt(grandTotalDue)}</h5>
+                  </div>
+              </div>`;
+
+          } else {
+              memoProfitHtml += '<p class="text-sm text-gray-500 mt-2">কোনো মেমো তৈরি হয়নি।</p>';
+          }
+          
+          // Expense Report HTML
+          expenseReportHtml = '<h4 class="font-bold text-lg border-b pb-1 mt-6 text-red-700">💸 খরচের সারাংশ (Expense Summary)</h4>';
+          expenseReportHtml += `<div class="grid grid-cols-2 gap-2 text-center mt-2">
+              <div class="bg-red-100 p-2 rounded-lg border border-red-400">
+                  <p class="text-sm font-semibold">দোকান থেকে মোট তোলা</p>
+                  <h5 class="font-bold text-xl text-red-800">৳${fmt(totalWithdrawal)}</h5>
+              </div>
+              <div class="bg-yellow-100 p-2 rounded-lg border border-yellow-400">
+                  <p class="text-sm font-semibold">মোট দোকানের খরচ</p>
+                  <h5 class="font-bold text-xl text-yellow-800">৳${fmt(totalStoreExpense)}</h5>
+              </div>
+              <div class="bg-indigo-100 p-2 rounded-lg border border-indigo-400">
+                  <p class="text-sm font-semibold">মোট ব্যক্তিগত খরচ</p>
+                  <h5 class="font-bold text-xl text-indigo-800">৳${fmt(totalPersonalExpense)}</h5>
+              </div>
+              <div class="bg-purple-100 p-2 rounded-lg border border-purple-400">
+                  <p class="text-sm font-semibold">মোট পারিবারিক খরচ</p>
+                  <h5 class="font-bold text-xl text-purple-800">৳${fmt(totalFamilyExpense)}</h5>
+              </div>
+              <div class="bg-gray-100 p-2 rounded-lg border border-gray-400 col-span-2">
+                  <p class="text-sm font-semibold">সকল প্রকার **মোট খরচ**</p>
+                  <h5 class="font-bold text-xl text-gray-800">৳${fmt(grandTotalExpense)}</h5>
+              </div>
+          </div>`;
+
+
+      }
+
+      // 3. DUE MEMOS REPORT (Always visible)
+      const dueMemos = allMemos.filter(m => (m.due || 0) > 0);
+      let dueMemosHtml = '<h4 class="font-bold text-lg border-b pb-1 mt-6 text-red-700">⚠️ বাকি কাস্টমারদের তালিকা (Due Memos)</h4>';
+      
+      // Grand Total Due Display (Always visible)
+      const grandTotalDueDisplay = `<div class="bg-red-100 p-2 rounded-lg mt-3 text-center border-2 border-red-500">
+          <p class="text-sm font-semibold">সকল মেমোর **মোট বাকি**</p>
+          <h5 class="font-bold text-xl text-red-700">৳${fmt(grandTotalDue)}</h5>
+      </div>`;
+      
+      dueMemosHtml += grandTotalDueDisplay;
+
+
+      if (dueMemos.length > 0) {
+          dueMemosHtml += '<table class="w-full border-collapse text-sm mt-4">';
+          dueMemosHtml += '<thead><tr class="bg-red-100"><th class="border p-1">মেমো নং</th><th class="border p-1">কাস্টমার (নাম/মোবাইল/ঠিকানা)</th><th class="border p-1">বাকি টাকা (৳)</th><th class="border p-1">যোগাযোগ</th></tr></thead>';
+          dueMemosHtml += '<tbody>';
+
+          dueMemos.slice().reverse().forEach(m => {
+              const customerName = escapeHtml(m.customer.name || 'নাম নেই');
+              const rawPhone = (m.customer.phone || '').replace(/[^0-9\+]/g, ''); 
+              const customerPhone = escapeHtml(m.customer.phone || 'মোবাইল নেই');
+              const customerAddr = escapeHtml(m.customer.addr || 'ঠিকানা নেই');
+              const dueAmount = fmt(m.due);
+
+              const message = encodeURIComponent(`প্রিয় ${customerName}, আপনার মেমো নং ${m.serial}-এ ৳${dueAmount} টাকা বাকি আছে। দয়া করে যত তাড়াতাড়ি সম্ভব পরিশোধ করুন। - RKB Store`);
+
+              const phoneLink = `tel:${rawPhone}`;
+              const smsLink = `sms:${rawPhone}?body=${message}`;
+              const whatsappLink = `https://wa.me/${rawPhone}?text=${message}`;
+              
+              const isHistory = memoHistory.some(h => h.id === m.id);
+              const rowClass = isHistory ? 'bg-orange-100 text-orange-800 italic border-orange-500' : '';
+
+              dueMemosHtml += `<tr class="${rowClass}">
+                  <td class="border p-1 text-center">${m.serial} ${isHistory ? '🗓️' : ''}</td>
+                  <td class="border p-1">
+                      **${customerName}**<br>
+                      <a href="${phoneLink}" class="text-blue-600 underline text-xs font-semibold">${customerPhone}</a> 
+                      <span class="text-xs text-gray-500">(ঠিকানা: ${customerAddr})</span>
+                  </td>
+                  <td class="border p-1 text-right font-bold text-red-600">৳${dueAmount}</td>
+                  <td class="border p-1 text-center space-y-1">
+                      <a href="${phoneLink}" class="bg-green-500 text-white px-2 py-1 rounded text-xs mb-1 block">📞 কল</a>
+                      <a href="${smsLink}" class="bg-blue-500 text-white px-2 py-1 rounded text-xs mb-1 block">💬 SMS</a>
+                      <a href="${whatsappLink}" target="_blank" class="bg-purple-600 text-white px-2 py-1 rounded text-xs block">📲 WhatsApp/Imo</a>
+                  </td>
+              </tr>`;
+          });
+
+          dueMemosHtml += '</tbody></table>';
+          dueMemosHtml += `<p class="text-xs text-gray-500 mt-2">**দ্রষ্টব্য:** 'WhatsApp/Imo' লিঙ্কে ক্লিক করলে আপনার ফোনে ইনস্টল থাকা চ্যাট অ্যাপে (যেমন: WhatsApp) মেসেজটি কপি হয়ে যাবে।</p>`;
+      } else {
+          dueMemosHtml += '<p class="text-sm text-green-600 mt-2">✅ কোনো মেমোতে বর্তমানে বাকি নেই।</p>';
+      }
+      
+      // Final render
+      if (secretsVisible) {
+          // New layout: Daily Expense Form/History at the top, then Inventory, then Profit/Memo, then Expense Summary, then Due Memos.
+          reportContent.innerHTML = expenseLoggingAndDailyHistory + inventoryHtml + profitHtml + memoProfitHtml + expenseReportHtml + dueMemosHtml;
+      } else {
+          // If locked, only show non-sensitive reports (Inventory and Due Memos)
+          reportContent.innerHTML = inventoryHtml + dueMemosHtml;
+      }
+  }
+  // END Report Modal Logic
+  
+  // init  
+  autoDeleteOldHistory(); // Run auto-deletion check on load
+  updateSecretsVisibility(); // Initialize visibility based on stored state (calls renderProducts, renderHistory, updateSummary)
+  
+  // save on unload  
+  window.addEventListener('beforeunload', ()=> { saveProducts(); saveMemos(); saveMemoHistory(); saveSerial(); saveSecretsState(); saveExpenses(); }); 
+</script>  
+</body>  
+</html>
